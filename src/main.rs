@@ -233,11 +233,11 @@ async fn on_room_message(
                 if body.starts_with(&matrix_state.configuration.command_prefix) {
                     let mut characters = body.chars();
                     characters.next();
-                    let command = characters.as_str();
+                    let command = characters.as_str().split(" ").nth(0).unwrap();
                     let mut arguments = Vec::new();
                     let mut current_argument = String::new();
                     let mut in_string = (false, "");
-                    for letter in command.chars() {
+                    for letter in characters {
                         if letter == '\\' {
                             in_string = (true, "\\");
                             continue;
@@ -272,6 +272,7 @@ async fn on_room_message(
                     if current_argument.len() > 0 {
                         arguments.push(current_argument);
                     }
+                    arguments.remove(0);
 
                     let command_input = commands::CommandInput {
                         event: event.clone(),
