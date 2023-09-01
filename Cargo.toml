@@ -8,6 +8,7 @@ anyhow = "1"
 chrono = "0.4.26"
 clap = { version = "4.4.1", features = ["derive"] }
 colored = "2.0.4"
+futures = "0.3.28"
 matrix-sdk = "0.6.2"
 phf = { version = "0.11.2", features = ["macros"] }
 reqwest = "0.11.20"

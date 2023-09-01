@@ -1575,6 +1575,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored",
+ "futures",
  "matrix-sdk",
  "phf",
  "reqwest",

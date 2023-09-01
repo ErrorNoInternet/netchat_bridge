@@ -37,4 +37,18 @@ impl Database {
             Err(error) => Err(error.to_string()),
         }
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (String, String)> {
+        self.database
+            .iter()
+            .filter(|result| result.is_ok())
+            .map(|result| {
+                (
+                    std::str::from_utf8(&result.clone().unwrap().0)
+                        .unwrap()
+                        .to_string(),
+                    std::str::from_utf8(&result.unwrap().1).unwrap().to_string(),
+                )
+            })
+    }
 }

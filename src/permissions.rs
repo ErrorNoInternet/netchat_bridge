@@ -2,12 +2,13 @@ use crate::commands::CommandInput;
 
 pub enum Action {
     BridgeCreate,
+    BridgeDestroy,
 }
 
 #[derive(PartialEq, PartialOrd)]
 enum PowerLevel {
-    User = 0,
-    Moderator = 50,
+    //    User = 0,
+    //    Moderator = 50,
     Administrator = 100,
 }
 
@@ -37,6 +38,7 @@ impl PowerLevelConstraint {
 pub fn get_power_level_constraint(action: Action) -> PowerLevelConstraint {
     match action {
         Action::BridgeCreate => PowerLevelConstraint::new(PowerLevel::Administrator as i64, None),
+        Action::BridgeDestroy => PowerLevelConstraint::new(PowerLevel::Administrator as i64, None),
     }
 }
 

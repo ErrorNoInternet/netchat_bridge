@@ -3,6 +3,7 @@ use colored::*;
 
 pub enum LogMessageType {
     Bot,
+    Bridge,
     Matrix,
     Warning,
     Error,
@@ -40,6 +41,14 @@ pub fn log_message(message_type: LogMessageType, message: &str) {
                 "{} {} {}",
                 current_time(),
                 colored_brackets(&"BOT".bold().magenta()),
+                message
+            )
+        }
+        LogMessageType::Bridge => {
+            println!(
+                "{} {} {}",
+                current_time(),
+                colored_brackets(&"BRIDGE".bold().cyan()),
                 message
             )
         }

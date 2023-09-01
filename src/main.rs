@@ -9,8 +9,9 @@ mod secrets;
 mod utilities;
 
 use clap::Parser;
+use configuration::Configuration;
 use database::Database;
-use logging::{log_message, LogMessageType::*};
+use logging::{log_error, log_matrix_error, log_message, LogMessageType::*};
 use matrix_sdk::event_handler::Ctx;
 use matrix_sdk::{
     config::SyncSettings,
@@ -21,7 +22,11 @@ use matrix_sdk::{
     },
     Client,
 };
+use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::sync::mpsc::{Receiver, Sender};
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
 use tokio::time::{sleep, Duration};
 
 #[derive(Parser, Debug)]
@@ -47,10 +52,170 @@ struct Arguments {
     database_path: String,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct BridgedRoomData {
+    room_name: String,
+    room_password: String,
+    message_count: usize,
+}
+
+pub struct NetChatBridgeMessage {
+    content: String,
+    matrix_room_id: String,
+}
+
+pub struct MatrixBridgeMessage {
+    netchat_room_name: String,
+    netchat_room_password: String,
+    netchat_username: String,
+    netchat_message: String,
+}
+
 #[derive(Clone)]
-pub struct MatrixState {
-    configuration: configuration::Configuration,
+pub struct MatrixContext {
+    bot_configuration: configuration::Configuration,
     database: Database,
+    matrix_queue_sender: Arc<Mutex<mpsc::Sender<MatrixBridgeMessage>>>,
+}
+
+async fn receive_netchat_messages(
+    netchat_queue_sender: mpsc::Sender<NetChatBridgeMessage>,
+    bot_configuration: &Configuration,
+    database: Database,
+) {
+    log_message(
+        Bridge,
+        &format!("Launched NetChat receiver thread! Waiting for messages from NetChat..."),
+    );
+
+    loop {
+        for (key, value) in database.iter() {
+            if key.starts_with("bridge.") {
+                let mut bridged_room_data =
+                    match serde_json::from_str::<BridgedRoomData>(value.as_str()) {
+                        Ok(bridged_room_data) => bridged_room_data,
+                        Err(error) => {
+                            log_error(error);
+                            continue;
+                        }
+                    };
+                let message_count = match netchat::message_count(
+                    &bot_configuration,
+                    &bridged_room_data.room_name,
+                    &bridged_room_data.room_password,
+                )
+                .await
+                {
+                    Ok(message_count) => message_count,
+                    Err(error) => {
+                        log_error(error);
+                        continue;
+                    }
+                };
+                if bridged_room_data.message_count > message_count {
+                    bridged_room_data.message_count = message_count;
+                    continue;
+                }
+                if message_count > bridged_room_data.message_count {
+                    let room_messages = match netchat::get_room_messages(
+                        &bot_configuration,
+                        &bridged_room_data.room_name,
+                        &bridged_room_data.room_password,
+                    )
+                    .await
+                    {
+                        Ok(room_messages) => room_messages,
+                        Err(error) => {
+                            log_error(error);
+                            continue;
+                        }
+                    };
+                    for message in &room_messages[bridged_room_data.message_count..] {
+                        let mut processed_message = message.to_string();
+                        processed_message.insert_str("[1970-01-01 00:00:00]".len(), "</b>");
+                        processed_message.insert_str(0, "<b>");
+                        netchat_queue_sender
+                            .send(NetChatBridgeMessage {
+                                content: processed_message,
+                                matrix_room_id: key["bridge.".len()..].to_string(),
+                            })
+                            .unwrap();
+                    }
+
+                    bridged_room_data.message_count = message_count;
+                    match database.set(
+                        &key,
+                        serde_json::to_string(&bridged_room_data).unwrap().as_str(),
+                    ) {
+                        Ok(_) => (),
+                        Err(error) => {
+                            log_error(error);
+                            continue;
+                        }
+                    };
+                }
+            };
+        }
+        thread::sleep(std::time::Duration::from_secs(
+            bot_configuration.refresh_interval,
+        ));
+    }
+}
+
+async fn bridge_netchat_messages(
+    netchat_queue_receiver: mpsc::Receiver<NetChatBridgeMessage>,
+    client: Client,
+) {
+    log_message(
+        Bridge,
+        &format!(
+            "Launched NetChat -> Matrix thread! Waiting for messages from the NetChat receiver..."
+        ),
+    );
+
+    loop {
+        let bridge_message = netchat_queue_receiver.recv().unwrap();
+        match client
+            .joined_rooms()
+            .iter()
+            .find(|item| item.room_id().as_str() == bridge_message.matrix_room_id)
+        {
+            Some(joined_room) => {
+                utilities::send_html_message(&joined_room, &bridge_message.content).await
+            }
+            None => (),
+        }
+    }
+}
+
+async fn bridge_matrix_messages(
+    matrix_queue_receiver: mpsc::Receiver<MatrixBridgeMessage>,
+    bot_configuration: &Configuration,
+) {
+    log_message(
+        Bridge,
+        &format!(
+            "Launched Matrix -> NetChat thread! Waiting for messages from the on_room_message event..."
+        ),
+    );
+
+    loop {
+        let bridge_message = matrix_queue_receiver.recv().unwrap();
+        match netchat::send_message(
+            &bot_configuration,
+            &bridge_message.netchat_room_name,
+            &bridge_message.netchat_room_password,
+            &bridge_message.netchat_username,
+            &bridge_message.netchat_message,
+        )
+        .await
+        {
+            Ok(_) => (),
+            Err(error) => {
+                log_error(error);
+            }
+        }
+    }
 }
 
 #[tokio::main]
@@ -119,14 +284,22 @@ async fn main() -> anyhow::Result<()> {
             std::process::exit(1);
         }
     };
+    let (netchat_tx, netchat_rx): (Sender<NetChatBridgeMessage>, Receiver<NetChatBridgeMessage>) =
+        mpsc::channel();
+    let (matrix_tx, matrix_rx): (Sender<MatrixBridgeMessage>, Receiver<MatrixBridgeMessage>) =
+        mpsc::channel();
     login_and_sync(
         bot_secrets.homeserver_url,
         &bot_secrets.username,
         &bot_secrets.password,
-        MatrixState {
-            configuration: bot_configuration,
+        MatrixContext {
+            bot_configuration,
             database,
+            matrix_queue_sender: Arc::new(Mutex::new(matrix_tx)),
         },
+        netchat_tx,
+        netchat_rx,
+        matrix_rx,
     )
     .await?;
     Ok(())
@@ -136,7 +309,10 @@ async fn login_and_sync(
     homeserver_url: String,
     username: &str,
     password: &str,
-    matrix_state: MatrixState,
+    matrix_context: MatrixContext,
+    netchat_queue_sender: mpsc::Sender<NetChatBridgeMessage>,
+    netchat_queue_receiver: mpsc::Receiver<NetChatBridgeMessage>,
+    matrix_queue_receiver: mpsc::Receiver<MatrixBridgeMessage>,
 ) -> anyhow::Result<()> {
     #[allow(unused_mut)]
     let mut client_builder = Client::builder().homeserver_url(&homeserver_url);
@@ -173,7 +349,24 @@ async fn login_and_sync(
         ),
     );
 
-    client.add_event_handler_context(matrix_state);
+    let thread_database = matrix_context.database.clone();
+    let thread_bot_configuration = matrix_context.bot_configuration.clone();
+    tokio::spawn(async move {
+        receive_netchat_messages(
+            netchat_queue_sender,
+            &thread_bot_configuration,
+            thread_database,
+        )
+        .await
+    });
+    let thread_client = client.clone();
+    tokio::spawn(async { bridge_netchat_messages(netchat_queue_receiver, thread_client).await });
+    let thread_bot_configuration = matrix_context.bot_configuration.clone();
+    tokio::spawn(async move {
+        bridge_matrix_messages(matrix_queue_receiver, &thread_bot_configuration).await
+    });
+
+    client.add_event_handler_context(matrix_context);
     client.add_event_handler(on_stripped_state_member);
     client.sync_once(SyncSettings::default()).await.unwrap();
     client.add_event_handler(on_room_message);
@@ -223,14 +416,17 @@ async fn on_stripped_state_member(
 async fn on_room_message(
     event: OriginalSyncRoomMessageEvent,
     room: Room,
-    matrix_state: Ctx<MatrixState>,
+    matrix_context: Ctx<MatrixContext>,
 ) {
+    if event.sender == room.client().user_id().unwrap() {
+        return;
+    }
+
     if let Room::Joined(room) = room {
         match event.content.msgtype {
             MessageType::Text(_) => {
                 let body = event.content.body();
-
-                if body.starts_with(&matrix_state.configuration.command_prefix) {
+                if body.starts_with(&matrix_context.bot_configuration.command_prefix) {
                     let mut characters = body.chars();
                     characters.next();
                     let command = characters.as_str().split(" ").nth(0).unwrap();
@@ -277,14 +473,104 @@ async fn on_room_message(
                     let command_input = commands::CommandInput {
                         event: event.clone(),
                         room,
-                        matrix_state,
+                        matrix_context,
                         arguments,
                     };
                     match command {
                         "ping" => commands::basic::ping_command(&command_input).await,
                         "bridge" => commands::bridge::bridge_command(&command_input).await,
+                        "username" => commands::username::username_command(&command_input).await,
                         _ => (),
                     };
+                } else {
+                    match matrix_context
+                        .database
+                        .get(&format!("bridge.{}", room.room_id().as_str()))
+                    {
+                        Ok(value) => match value {
+                            Some(value) => {
+                                match serde_json::from_str::<BridgedRoomData>(value.as_str()) {
+                                    Ok(bridged_room_data) => {
+                                        let mut bridged_room_data = bridged_room_data;
+                                        let mut custom_username = false;
+                                        let mut netchat_username =
+                                            match matrix_context.database.get(&format!(
+                                                "username.{}.{}",
+                                                room.room_id().as_str(),
+                                                event.sender.as_str()
+                                            )) {
+                                                Ok(netchat_username) => match netchat_username {
+                                                    Some(netchat_username) => {
+                                                        custom_username = true;
+                                                        netchat_username
+                                                    }
+                                                    None => "".to_string(),
+                                                },
+                                                Err(error) => {
+                                                    log_error(error);
+                                                    "".to_string()
+                                                }
+                                            };
+                                        if !custom_username {
+                                            netchat_username = match room
+                                                .get_member(&event.sender)
+                                                .await
+                                            {
+                                                Ok(member) => match member {
+                                                    Some(member) => match member.display_name() {
+                                                        Some(display_name) => {
+                                                            display_name.to_string()
+                                                        }
+                                                        None => event.sender.as_str().to_string(),
+                                                    },
+                                                    None => event.sender.as_str().to_string(),
+                                                },
+                                                Err(error) => {
+                                                    log_error(error);
+                                                    event.sender.as_str().to_string()
+                                                }
+                                            }
+                                        };
+                                        matrix_context
+                                            .matrix_queue_sender
+                                            .lock()
+                                            .unwrap()
+                                            .send(MatrixBridgeMessage {
+                                                netchat_room_name: bridged_room_data
+                                                    .clone()
+                                                    .room_name,
+                                                netchat_room_password: bridged_room_data
+                                                    .clone()
+                                                    .room_password,
+                                                netchat_username: netchat_username.to_string(),
+                                                netchat_message: body.to_string(),
+                                            })
+                                            .unwrap();
+                                        bridged_room_data.message_count += 1;
+                                        match matrix_context.database.set(
+                                            &format!("bridge.{}", room.room_id().as_str()),
+                                            serde_json::to_string(&bridged_room_data)
+                                                .unwrap()
+                                                .as_str(),
+                                        ) {
+                                            Ok(_) => (),
+                                            Err(error) => {
+                                                log_error(error);
+                                            }
+                                        };
+                                        log_matrix_error(room.read_receipt(&event.event_id).await);
+                                    }
+                                    Err(error) => {
+                                        log_error(&error);
+                                    }
+                                }
+                            }
+                            None => (),
+                        },
+                        Err(error) => {
+                            log_error(&error);
+                        }
+                    }
                 }
             }
             _ => (),

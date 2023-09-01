@@ -5,12 +5,18 @@ use std::path::Path;
 pub struct Configuration {
     #[serde(default)]
     pub command_prefix: String,
+    #[serde(default)]
+    pub refresh_interval: u64,
+    #[serde(default)]
+    pub request_timeout: u64,
 }
 
 impl Default for Configuration {
     fn default() -> Self {
         Self {
             command_prefix: "!".to_string(),
+            refresh_interval: 5,
+            request_timeout: 30,
         }
     }
 }

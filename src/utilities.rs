@@ -1,10 +1,20 @@
 use crate::{
     commands::CommandInput,
     language::get_text,
-    logging::{log_error, log_matrix_error},
+    logging::{log_error, log_matrix_error, log_message},
     permissions::{self, Action},
 };
 use matrix_sdk::{room, ruma::events::room::message::RoomMessageEventContent};
+
+fn has_html(string: &str) -> bool {
+    let html_tags = ["b", "code"];
+    for tag in html_tags {
+        if string.contains(&format!("<{tag}>")) && string.contains(&format!("</{tag}>")) {
+            return true;
+        }
+    }
+    false
+}
 
 pub async fn handle_permissions(command_input: &CommandInput, action: Action) -> bool {
     if !match permissions::is_allowed(&command_input, Action::BridgeCreate).await {
@@ -40,6 +50,13 @@ pub async fn set_typing(room: &room::Joined, typing: bool) {
 }
 
 pub async fn send_plain_message(room: &room::Joined, content: &str) {
+    if has_html(&content) {
+        log_message(
+            crate::logging::LogMessageType::Warning,
+            &format!("HTML not used but sent formatted message ({content})",),
+        );
+    }
+
     log_matrix_error(
         room.send(RoomMessageEventContent::text_plain(content), None)
             .await,
@@ -48,6 +65,13 @@ pub async fn send_plain_message(room: &room::Joined, content: &str) {
 }
 
 pub async fn send_html_message(room: &room::Joined, content: &str) {
+    if !has_html(&content) {
+        log_message(
+            crate::logging::LogMessageType::Warning,
+            &format!("HTML not used but sent formatted message ({content})",),
+        );
+    }
+
     log_matrix_error(
         room.send(RoomMessageEventContent::text_html(content, content), None)
             .await,
