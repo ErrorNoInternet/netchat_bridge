@@ -14,7 +14,8 @@ pub async fn bridge_command(command_input: &CommandInput) {
                 .replace("{arguments}", "room_name, room_password")
                 .as_str(),
         )
-        .await
+        .await;
+        return;
     }
     let room_name = &command_input.arguments[0];
     let room_password = &command_input.arguments[1];
