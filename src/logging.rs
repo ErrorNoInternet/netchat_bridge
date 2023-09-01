@@ -10,14 +10,30 @@ pub enum LogMessageType {
     MatrixError,
 }
 
+#[track_caller]
 pub fn log_matrix_error<T, E: std::fmt::Display>(result: Result<T, E>) {
     match result {
         Ok(_) => (),
-        Err(error) => log_message(LogMessageType::MatrixError, &error.to_string()),
+        Err(error) => {
+            let caller = std::panic::Location::caller();
+            log_message(
+                LogMessageType::MatrixError,
+                &format!("Error in {} (L{}): {error}", caller.file(), caller.line()),
+            )
+        }
     }
 }
 
-pub fn log_message(message_type: LogMessageType, message: &String) {
+#[track_caller]
+pub fn log_error<E: std::fmt::Display>(error: E) {
+    let caller = std::panic::Location::caller();
+    log_message(
+        LogMessageType::Error,
+        &format!("Error in {} (L{}): {error}", caller.file(), caller.line()),
+    )
+}
+
+pub fn log_message(message_type: LogMessageType, message: &str) {
     match message_type {
         LogMessageType::Bot => {
             println!(
