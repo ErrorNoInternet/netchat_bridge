@@ -10,6 +10,7 @@ clap = { version = "4.4.1", features = ["derive"] }
 colored = "2.0.4"
 matrix-sdk = "0.6.2"
 phf = { version = "0.11.2", features = ["macros"] }
+reqwest = "0.11.20"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.105"
 tokio = { version = "1.24.2", features = ["macros", "rt-multi-thread"] }

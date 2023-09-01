@@ -2,6 +2,8 @@ mod commands;
 mod configuration;
 mod language;
 mod logging;
+mod netchat;
+mod permissions;
 mod secrets;
 mod utilities;
 
@@ -230,6 +232,7 @@ async fn on_room_message(
                     };
                     match command {
                         "ping" => commands::basic::ping_command(&command_input).await,
+                        "bridge" => commands::bridge::bridge_command(&command_input).await,
                         _ => (),
                     };
                 }

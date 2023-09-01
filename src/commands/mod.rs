@@ -1,4 +1,5 @@
 pub mod basic;
+pub mod bridge;
 
 use crate::MatrixState;
 use matrix_sdk::room::Joined;

@@ -1577,6 +1577,7 @@ dependencies = [
  "colored",
  "matrix-sdk",
  "phf",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",
