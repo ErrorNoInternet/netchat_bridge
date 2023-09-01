@@ -67,50 +67,14 @@ pub async fn bridge_command(command_input: &CommandInput) {
             }
 
             utilities::set_typing(&command_input.room, true).await;
-            match netchat::is_initializing(
+            match netchat::get_room(
                 &command_input.matrix_context.bot_configuration,
                 room_name,
                 room_password,
             )
             .await
             {
-                Ok(is_initializing) => {
-                    if is_initializing {
-                        utilities::send_plain_message(
-                            &command_input.room,
-                            get_text("room_currently_initializing"),
-                        )
-                        .await;
-                        return;
-                    }
-                }
-                Err(error) => {
-                    log_error(&error);
-                    utilities::send_html_message(
-                        &command_input.room,
-                        &get_text("fetch_room_failed").replace("{error}", &error.to_string()),
-                    )
-                    .await;
-                    return;
-                }
-            };
-            match netchat::is_correct_password(
-                &command_input.matrix_context.bot_configuration,
-                room_name,
-                room_password,
-            )
-            .await
-            {
-                Ok(is_correct_password) => {
-                    if !is_correct_password {
-                        utilities::send_plain_message(
-                            &command_input.room,
-                            get_text("room_wrong_password"),
-                        )
-                        .await;
-                        return;
-                    }
-                }
+                Ok(_) => (),
                 Err(error) => {
                     log_error(&error);
                     utilities::send_html_message(

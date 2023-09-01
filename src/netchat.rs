@@ -35,6 +35,8 @@ pub async fn get_room(
                 Err(format!("encountered server error"))
             } else if response.status() == 429 {
                 Err(format!("encountered ratelimit"))
+            } else if response.status() == 401 {
+                Err(format!("unauthorized"))
             } else {
                 match response.text().await {
                     Ok(text) => Ok(text),
@@ -62,6 +64,8 @@ pub async fn get_room_cache(
                 Err(format!("encountered server error"))
             } else if response.status() == 429 {
                 Err(format!("encountered ratelimit"))
+            } else if response.status() == 401 {
+                Err(format!("unauthorized"))
             } else {
                 match response.text().await {
                     Ok(text) => Ok(text),
@@ -89,6 +93,8 @@ pub async fn get_room_messages(
                 Err(format!("encountered server error"))
             } else if response.status() == 429 {
                 Err(format!("encountered ratelimit"))
+            } else if response.status() == 401 {
+                Err(format!("unauthorized"))
             } else {
                 match response.text().await {
                     Ok(text) => match serde_json::from_str(&text) {
@@ -135,30 +141,14 @@ pub async fn send_message(
                 Err(format!("encountered server error"))
             } else if response.status() == 429 {
                 Err(format!("encountered ratelimit"))
+            } else if response.status() == 401 {
+                Err(format!("unauthorized"))
             } else {
                 Ok(())
             }
         }
         Err(error) => Err(format!("failed to send GET request: {error}")),
     }
-}
-
-pub async fn is_initializing(
-    bot_configuration: &Configuration,
-    name: &str,
-    password: &str,
-) -> Result<bool, String> {
-    Ok(get_room(&bot_configuration, name, password)
-        .await?
-        .contains("<title>Initializing...</title><style>body"))
-}
-
-pub async fn is_correct_password(
-    bot_configuration: &Configuration,
-    name: &str,
-    password: &str,
-) -> Result<bool, String> {
-    Ok(get_room(&bot_configuration, name, password).await? != "Wrong Password!")
 }
 
 pub async fn message_count(
