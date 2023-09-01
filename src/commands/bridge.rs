@@ -21,7 +21,7 @@ pub async fn bridge_command(command_input: &CommandInput) {
                 &command_input.room,
                 get_text("missing_arguments")
                     .replace("{count}", "2")
-                    .replace("{arguments}", "create <room_name> <room_password>")
+                    .replace("{arguments}", "create [room_name] [room_password]")
                     .as_str(),
             )
             .await;

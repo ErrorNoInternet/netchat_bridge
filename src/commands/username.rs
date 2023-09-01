@@ -18,7 +18,7 @@ pub async fn username_command(command_input: &CommandInput) {
                 &command_input.room,
                 get_text("missing_arguments")
                     .replace("{count}", "1")
-                    .replace("{arguments}", "set <name>")
+                    .replace("{arguments}", "set [name]")
                     .as_str(),
             )
             .await;
