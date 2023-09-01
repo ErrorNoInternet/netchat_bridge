@@ -1,7 +1,7 @@
 use crate::{
     commands::CommandInput,
     language::get_text,
-    logging::log_matrix_error,
+    logging::{log_error, log_matrix_error},
     permissions::{self, Action},
 };
 use matrix_sdk::{room, ruma::events::room::message::RoomMessageEventContent};
@@ -10,6 +10,7 @@ pub async fn handle_permissions(command_input: &CommandInput, action: Action) ->
     if !match permissions::is_allowed(&command_input, Action::BridgeCreate).await {
         Ok(is_allowed) => is_allowed,
         Err(error) => {
+            log_error(&error);
             send_plain_message(
                 &command_input.room,
                 &get_text("fetch_permissions_failed").replace("{error}", &error.to_string()),
