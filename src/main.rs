@@ -215,14 +215,47 @@ async fn on_room_message(
                 let body = event.content.body();
 
                 if body.starts_with(&matrix_state.configuration.command_prefix) {
-                    let mut characters = body.split(" ").nth(0).unwrap().chars();
+                    let mut characters = body.chars();
                     characters.next();
                     let command = characters.as_str();
-                    let arguments: Vec<String> = body
-                        .split(" ")
-                        .skip(1)
-                        .map(|item| item.to_string())
-                        .collect();
+                    let mut arguments = Vec::new();
+                    let mut current_argument = String::new();
+                    let mut in_string = (false, "");
+                    for letter in command.chars() {
+                        if letter == '\\' {
+                            in_string = (true, "\\");
+                            continue;
+                        }
+                        if letter == ' ' && !in_string.0 {
+                            if current_argument.len() > 0 {
+                                arguments.push(current_argument);
+                                current_argument = String::new();
+                            }
+                            continue;
+                        }
+                        if letter == '"' && !in_string.0 {
+                            in_string = (true, "\"");
+                            if current_argument.len() > 0 {
+                                arguments.push(current_argument);
+                                current_argument = String::new();
+                            }
+                            continue;
+                        } else if letter == '"' && in_string.0 {
+                            in_string = (false, "");
+                            if current_argument.len() > 0 {
+                                arguments.push(current_argument);
+                                current_argument = String::new();
+                            }
+                            continue;
+                        }
+                        current_argument.push(letter);
+                        if in_string == (true, "\\") {
+                            in_string = (false, "");
+                        }
+                    }
+                    if current_argument.len() > 0 {
+                        arguments.push(current_argument);
+                    }
 
                     let command_input = commands::CommandInput {
                         event: event.clone(),
