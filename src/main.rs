@@ -1,5 +1,6 @@
 mod commands;
 mod configuration;
+mod database;
 mod language;
 mod logging;
 mod netchat;
@@ -8,6 +9,7 @@ mod secrets;
 mod utilities;
 
 use clap::Parser;
+use database::Database;
 use logging::{log_message, LogMessageType::*};
 use matrix_sdk::event_handler::Ctx;
 use matrix_sdk::{
@@ -38,11 +40,17 @@ struct Arguments {
     /// Generate a new configuration file with defaults.
     #[arg(short, long)]
     generate_configuration_file: bool,
+
+    /// The path to the database (automatically
+    /// created if it doesn't exist)
+    #[arg(short, long, default_value = "netchat_bridge.db")]
+    database_path: String,
 }
 
 #[derive(Clone)]
 pub struct MatrixState {
     configuration: configuration::Configuration,
+    database: Database,
 }
 
 #[tokio::main]
@@ -104,12 +112,20 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    let database = match Database::new(&arguments.database_path) {
+        Ok(database) => database,
+        Err(error) => {
+            log_message(Error, &format!("Unable to open database: {error}"));
+            std::process::exit(1);
+        }
+    };
     login_and_sync(
         bot_secrets.homeserver_url,
         &bot_secrets.username,
         &bot_secrets.password,
         MatrixState {
             configuration: bot_configuration,
+            database,
         },
     )
     .await?;
