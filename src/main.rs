@@ -85,7 +85,7 @@ async fn receive_netchat_messages(
 ) {
     log_message(
         Bridge,
-        &format!("Launched NetChat receiver thread! Waiting for messages from NetChat..."),
+        &format!("Running NetChat receiver thread! Waiting for messages from NetChat..."),
     );
 
     loop {
@@ -169,7 +169,7 @@ async fn bridge_netchat_messages(
     log_message(
         Bridge,
         &format!(
-            "Launched NetChat -> Matrix thread! Waiting for messages from the NetChat receiver..."
+            "Running NetChat -> Matrix thread! Waiting for messages from the NetChat receiver..."
         ),
     );
 
@@ -195,7 +195,7 @@ async fn bridge_matrix_messages(
     log_message(
         Bridge,
         &format!(
-            "Launched Matrix -> NetChat thread! Waiting for messages from the on_room_message event..."
+            "Running Matrix -> NetChat thread! Waiting for messages from the on_room_message event..."
         ),
     );
 
@@ -365,6 +365,7 @@ async fn login_and_sync(
     tokio::spawn(async move {
         bridge_matrix_messages(matrix_queue_receiver, &thread_bot_configuration).await
     });
+    log_message(Bridge, "All threads have been spawned!");
 
     client.add_event_handler_context(matrix_context);
     client.add_event_handler(on_stripped_state_member);
