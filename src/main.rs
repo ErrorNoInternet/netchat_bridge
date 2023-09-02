@@ -26,7 +26,6 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, Arc, Mutex};
-use std::thread;
 use tokio::time::{sleep, Duration};
 
 #[derive(Parser, Debug)]
@@ -156,9 +155,10 @@ async fn receive_netchat_messages(
                 }
             };
         }
-        thread::sleep(std::time::Duration::from_secs(
+        sleep(std::time::Duration::from_secs(
             bot_configuration.refresh_interval,
-        ));
+        ))
+        .await;
     }
 }
 
