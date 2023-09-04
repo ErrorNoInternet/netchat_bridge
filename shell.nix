@@ -16,7 +16,6 @@ in pkgs.mkShell {
     buildInputs = [
         rust
         pkgs.openssl
-        pkgs.pkg-config
     ];
 
     PKG_CONFIG_ALLOW_CROSS = true;
