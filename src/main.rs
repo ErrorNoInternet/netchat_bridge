@@ -113,6 +113,15 @@ async fn receive_netchat_messages(
                 };
                 if bridged_room_data.message_count > message_count {
                     bridged_room_data.message_count = message_count;
+                    match database.set(
+                        &key,
+                        serde_json::to_string(&bridged_room_data).unwrap().as_str(),
+                    ) {
+                        Ok(_) => (),
+                        Err(error) => {
+                            log_error(error);
+                        }
+                    };
                     continue;
                 }
                 if message_count > bridged_room_data.message_count {
