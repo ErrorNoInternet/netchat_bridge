@@ -129,16 +129,18 @@ async fn receive_netchat_messages(
                             continue;
                         }
                     };
-                    for message in &room_messages[bridged_room_data.message_count..] {
-                        let mut processed_message = message.to_string();
-                        processed_message.insert_str("[1970-01-01 00:00:00]".len(), "</b>");
-                        processed_message.insert_str(0, "<b>");
-                        netchat_queue_sender
-                            .send(NetChatBridgeMessage {
-                                content: processed_message,
-                                matrix_room_id: key["bridge.".len()..].to_string(),
-                            })
-                            .unwrap();
+                    if room_messages.len() > bridged_room_data.message_count {
+                        for message in &room_messages[bridged_room_data.message_count..] {
+                            let mut processed_message = message.to_string();
+                            processed_message.insert_str("[1970-01-01 00:00:00]".len(), "</b>");
+                            processed_message.insert_str(0, "<b>");
+                            netchat_queue_sender
+                                .send(NetChatBridgeMessage {
+                                    content: processed_message,
+                                    matrix_room_id: key["bridge.".len()..].to_string(),
+                                })
+                                .unwrap();
+                        }
                     }
 
                     bridged_room_data.message_count = message_count;
