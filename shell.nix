@@ -15,7 +15,6 @@ in pkgs.mkShell {
     name = "rust-env";
     buildInputs = [
         rust
-        pkgs.openssl
     ];
 
     PKG_CONFIG_ALLOW_CROSS = true;
