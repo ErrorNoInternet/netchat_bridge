@@ -32,15 +32,17 @@ pub async fn get_room(
     {
         Ok(response) => {
             if response.status().is_server_error() {
-                Err(format!("encountered server error"))
+                Err(format!("encountered server error while fetching room"))
             } else if response.status() == 429 {
-                Err(format!("encountered ratelimit"))
+                Err(format!("encountered ratelimit while fetching room"))
             } else if response.status() == 401 {
-                Err(format!("unauthorized"))
+                Err(format!("unauthorized while fetching room"))
             } else {
                 match response.text().await {
                     Ok(text) => Ok(text),
-                    Err(error) => Err(format!("failed to get response text: {error}")),
+                    Err(error) => Err(format!(
+                        "failed to get response text while fetching room: {error}"
+                    )),
                 }
             }
         }
@@ -61,18 +63,26 @@ pub async fn get_room_message_count(
     {
         Ok(response) => {
             if response.status().is_server_error() {
-                Err(format!("encountered server error"))
+                Err(format!(
+                    "encountered server error while fetching message count"
+                ))
             } else if response.status() == 429 {
-                Err(format!("encountered ratelimit"))
+                Err(format!(
+                    "encountered ratelimit while fetching message count"
+                ))
             } else if response.status() == 401 {
-                Err(format!("unauthorized"))
+                Err(format!("unauthorized while fetching message count"))
             } else {
                 match response.text().await {
                     Ok(text) => match text.parse() {
                         Ok(message_count) => Ok(message_count),
-                        Err(error) => Err(format!("failed to deserialize response: {error}")),
+                        Err(error) => Err(format!(
+                            "failed to deserialize response while fetching message count: {error}"
+                        )),
                     },
-                    Err(error) => Err(format!("failed to get response text: {error}")),
+                    Err(error) => Err(format!(
+                        "failed to get response text while fetching message count: {error}"
+                    )),
                 }
             }
         }
@@ -93,18 +103,22 @@ pub async fn get_room_messages(
     {
         Ok(response) => {
             if response.status().is_server_error() {
-                Err(format!("encountered server error"))
+                Err(format!("encountered server error while fetching messages"))
             } else if response.status() == 429 {
-                Err(format!("encountered ratelimit"))
+                Err(format!("encountered ratelimit while fetching messages"))
             } else if response.status() == 401 {
-                Err(format!("unauthorized"))
+                Err(format!("unauthorized while fetching messages"))
             } else {
                 match response.text().await {
                     Ok(text) => match serde_json::from_str(&text) {
                         Ok(raw_messages) => Ok(raw_messages),
-                        Err(error) => Err(format!("failed to deserialize response: {error}")),
+                        Err(error) => Err(format!(
+                            "failed to deserialize response while fetching messages: {error}"
+                        )),
                     },
-                    Err(error) => Err(format!("failed to get response text: {error}")),
+                    Err(error) => Err(format!(
+                        "failed to get response text while fetching messages: {error}"
+                    )),
                 }
             }
         }
@@ -141,11 +155,11 @@ pub async fn send_message(
     {
         Ok(response) => {
             if response.status().is_server_error() {
-                Err(format!("encountered server error"))
+                Err(format!("encountered server error while sending message"))
             } else if response.status() == 429 {
-                Err(format!("encountered ratelimit"))
+                Err(format!("encountered ratelimit while sending message"))
             } else if response.status() == 401 {
-                Err(format!("unauthorized"))
+                Err(format!("unauthorized while sending message"))
             } else {
                 Ok(())
             }
