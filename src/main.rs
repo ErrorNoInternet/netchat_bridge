@@ -98,7 +98,7 @@ async fn receive_netchat_messages(
                             continue;
                         }
                     };
-                let message_count = match netchat::message_count(
+                let message_count = match netchat::get_room_message_count(
                     &bot_configuration,
                     &bridged_room_data.room_name,
                     &bridged_room_data.room_password,

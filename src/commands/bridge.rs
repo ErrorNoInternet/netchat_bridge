@@ -85,7 +85,7 @@ pub async fn bridge_command(command_input: &CommandInput) {
                     return;
                 }
             };
-            let message_count = match netchat::message_count(
+            let message_count = match netchat::get_room_message_count(
                 &command_input.matrix_context.bot_configuration,
                 room_name,
                 room_password,

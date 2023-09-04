@@ -48,14 +48,14 @@ pub async fn get_room(
     }
 }
 
-pub async fn get_room_cache(
+pub async fn get_room_message_count(
     bot_configuration: &Configuration,
     name: &str,
     password: &str,
-) -> Result<String, String> {
+) -> Result<usize, String> {
     match make_request(
         &bot_configuration,
-        &format!("{NETCHAT_INSTANCE}/{password}/{name}/messageCache"),
+        &format!("{NETCHAT_INSTANCE}/{password}/{name}/messageCount"),
     )
     .await
     {
@@ -68,7 +68,10 @@ pub async fn get_room_cache(
                 Err(format!("unauthorized"))
             } else {
                 match response.text().await {
-                    Ok(text) => Ok(text),
+                    Ok(text) => match text.parse() {
+                        Ok(message_count) => Ok(message_count),
+                        Err(error) => Err(format!("failed to deserialize response: {error}")),
+                    },
                     Err(error) => Err(format!("failed to get response text: {error}")),
                 }
             }
@@ -149,16 +152,4 @@ pub async fn send_message(
         }
         Err(error) => Err(format!("failed to send GET request: {error}")),
     }
-}
-
-pub async fn message_count(
-    bot_configuration: &Configuration,
-    name: &str,
-    password: &str,
-) -> Result<usize, String> {
-    Ok(get_room_cache(&bot_configuration, name, password)
-        .await?
-        .matches(", ")
-        .count()
-        + 1)
 }
