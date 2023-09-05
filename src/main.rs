@@ -56,6 +56,7 @@ pub struct BridgedRoomData {
     room_name: String,
     room_password: String,
     message_count: usize,
+    pending_messages: usize,
 }
 
 pub struct NetChatBridgeMessage {
@@ -68,6 +69,7 @@ pub struct MatrixBridgeMessage {
     netchat_room_password: String,
     netchat_username: String,
     netchat_message: String,
+    matrix_room_id: String,
 }
 
 #[derive(Clone)]
@@ -90,7 +92,7 @@ async fn receive_netchat_messages(
     loop {
         for (key, value) in database.iter() {
             if key.starts_with("bridge.") {
-                let mut bridged_room_data =
+                let bridged_room_data =
                     match serde_json::from_str::<BridgedRoomData>(value.as_str()) {
                         Ok(bridged_room_data) => bridged_room_data,
                         Err(error) => {
@@ -111,6 +113,24 @@ async fn receive_netchat_messages(
                         continue;
                     }
                 };
+                let mut bridged_room_data = match database.get(&key) {
+                    Ok(value) => match value {
+                        Some(value) => {
+                            match serde_json::from_str::<BridgedRoomData>(value.as_str()) {
+                                Ok(bridged_room_data) => bridged_room_data,
+                                Err(error) => {
+                                    log_error(error);
+                                    continue;
+                                }
+                            }
+                        }
+                        None => continue,
+                    },
+                    Err(error) => {
+                        log_error(error);
+                        continue;
+                    }
+                };
                 if bridged_room_data.message_count > message_count {
                     bridged_room_data.message_count = message_count;
                     match database.set(
@@ -124,6 +144,8 @@ async fn receive_netchat_messages(
                     };
                     continue;
                 }
+                bridged_room_data.message_count += bridged_room_data.pending_messages;
+                bridged_room_data.pending_messages = 0;
                 if message_count > bridged_room_data.message_count {
                     let room_messages = match netchat::get_room_messages(
                         &bot_configuration,
@@ -153,17 +175,17 @@ async fn receive_netchat_messages(
                     }
 
                     bridged_room_data.message_count = message_count;
-                    match database.set(
-                        &key,
-                        serde_json::to_string(&bridged_room_data).unwrap().as_str(),
-                    ) {
-                        Ok(_) => (),
-                        Err(error) => {
-                            log_error(error);
-                            continue;
-                        }
-                    };
                 }
+                match database.set(
+                    &key,
+                    serde_json::to_string(&bridged_room_data).unwrap().as_str(),
+                ) {
+                    Ok(_) => (),
+                    Err(error) => {
+                        log_error(error);
+                        continue;
+                    }
+                };
             };
         }
         sleep(std::time::Duration::from_secs(
@@ -202,6 +224,7 @@ async fn bridge_netchat_messages(
 async fn bridge_matrix_messages(
     matrix_queue_receiver: mpsc::Receiver<MatrixBridgeMessage>,
     bot_configuration: &Configuration,
+    database: Database,
 ) {
     log_message(
         Bridge,
@@ -226,6 +249,32 @@ async fn bridge_matrix_messages(
                 log_error(error);
             }
         }
+        match database.get(&format!("bridge.{}", bridge_message.matrix_room_id)) {
+            Ok(value) => match value {
+                Some(value) => match serde_json::from_str::<BridgedRoomData>(value.as_str()) {
+                    Ok(bridged_room_data) => {
+                        let mut bridged_room_data = bridged_room_data;
+                        bridged_room_data.pending_messages += 1;
+                        match database.set(
+                            &format!("bridge.{}", bridge_message.matrix_room_id),
+                            serde_json::to_string(&bridged_room_data).unwrap().as_str(),
+                        ) {
+                            Ok(_) => (),
+                            Err(error) => {
+                                log_error(error);
+                            }
+                        };
+                    }
+                    Err(error) => {
+                        log_error(&error);
+                    }
+                },
+                None => (),
+            },
+            Err(error) => {
+                log_error(&error);
+            }
+        };
     }
 }
 
@@ -360,8 +409,8 @@ async fn login_and_sync(
         ),
     );
 
-    let thread_database = matrix_context.database.clone();
     let thread_bot_configuration = matrix_context.bot_configuration.clone();
+    let thread_database = matrix_context.database.clone();
     tokio::spawn(async move {
         receive_netchat_messages(
             netchat_queue_sender,
@@ -373,8 +422,14 @@ async fn login_and_sync(
     let thread_client = client.clone();
     tokio::spawn(async { bridge_netchat_messages(netchat_queue_receiver, thread_client).await });
     let thread_bot_configuration = matrix_context.bot_configuration.clone();
+    let thread_database = matrix_context.database.clone();
     tokio::spawn(async move {
-        bridge_matrix_messages(matrix_queue_receiver, &thread_bot_configuration).await
+        bridge_matrix_messages(
+            matrix_queue_receiver,
+            &thread_bot_configuration,
+            thread_database,
+        )
+        .await
     });
     log_message(Bridge, "All threads have been spawned!");
 
@@ -503,7 +558,6 @@ async fn on_room_message(
                             Some(value) => {
                                 match serde_json::from_str::<BridgedRoomData>(value.as_str()) {
                                     Ok(bridged_room_data) => {
-                                        let mut bridged_room_data = bridged_room_data;
                                         let mut custom_username = false;
                                         let mut netchat_username =
                                             match matrix_context.database.get(&format!(
@@ -556,20 +610,9 @@ async fn on_room_message(
                                                     .room_password,
                                                 netchat_username: netchat_username.to_string(),
                                                 netchat_message: body.to_string(),
+                                                matrix_room_id: room.room_id().as_str().to_string(),
                                             })
                                             .unwrap();
-                                        bridged_room_data.message_count += 1;
-                                        match matrix_context.database.set(
-                                            &format!("bridge.{}", room.room_id().as_str()),
-                                            serde_json::to_string(&bridged_room_data)
-                                                .unwrap()
-                                                .as_str(),
-                                        ) {
-                                            Ok(_) => (),
-                                            Err(error) => {
-                                                log_error(error);
-                                            }
-                                        };
                                         log_matrix_error(room.read_receipt(&event.event_id).await);
                                     }
                                     Err(error) => {

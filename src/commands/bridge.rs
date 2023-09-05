@@ -110,6 +110,7 @@ pub async fn bridge_command(command_input: &CommandInput) {
                     room_name: room_name.to_string(),
                     room_password: room_password.to_string(),
                     message_count,
+                    pending_messages: 0,
                 })
                 .unwrap()
                 .as_str(),
