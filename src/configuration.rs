@@ -16,7 +16,7 @@ impl Default for Configuration {
         Self {
             command_prefix: "!".to_string(),
             refresh_interval: 5,
-            request_timeout: 30,
+            request_timeout: 10,
         }
     }
 }
