@@ -1,6 +1,9 @@
 use crate::configuration::Configuration;
+use once_cell::sync::Lazy;
+use rand::Rng;
 
 const NETCHAT_INSTANCE: &str = "https://netchat.repl.co";
+static NETCHAT_SESSION_ID: Lazy<u64> = Lazy::new(|| rand::thread_rng().gen());
 
 async fn make_request(
     bot_configuration: &Configuration,
@@ -11,8 +14,9 @@ async fn make_request(
             bot_configuration.request_timeout,
         ))
         .user_agent(format!(
-            "netchat_bridge/{} (url:{url}) reqwest",
-            env!("CARGO_PKG_VERSION")
+            "netchat_bridge/{} (id:{}) reqwest",
+            env!("CARGO_PKG_VERSION"),
+            *NETCHAT_SESSION_ID
         ))
         .build()
         .unwrap();
