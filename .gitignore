@@ -1,4 +1,4 @@
 /target
+/testing
 secrets.json
 configuration.json
-netchat_bridge.db
